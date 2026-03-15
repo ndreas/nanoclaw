@@ -9,6 +9,8 @@ import {
   TIMEZONE,
   TRIGGER_PATTERN,
 } from './config.js';
+
+const MAX_SESSION_FAILURES = 3; // Clear session after 3 consecutive failures
 import { startCredentialProxy } from './credential-proxy.js';
 import './channels/index.js';
 import {
@@ -41,6 +43,10 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
+  getSessionHealth,
+  recordSessionFailure,
+  clearSessionHealth,
+  deleteSession,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
@@ -327,13 +333,49 @@ async function runAgent(
     }
 
     if (output.status === 'error') {
+      // Track consecutive failures for this session
+      const health = getSessionHealth(group.folder);
+      const failureCount = (health?.consecutive_failures || 0) + 1;
+
+      recordSessionFailure(group.folder, output.error || 'Unknown error');
+
+      // Clear corrupted session after MAX_SESSION_FAILURES
+      if (failureCount >= MAX_SESSION_FAILURES) {
+        logger.warn(
+          {
+            group: group.name,
+            failureCount,
+            lastError: output.error,
+          },
+          'Session appears corrupted after repeated failures, clearing for fresh start',
+        );
+
+        // Clear the corrupted session
+        delete sessions[group.folder];
+        deleteSession(group.folder);
+
+        logger.info(
+          { group: group.name },
+          'Session cleared - next retry will start fresh',
+        );
+      }
+
       logger.error(
-        { group: group.name, error: output.error },
+        { group: group.name, error: output.error, failureCount },
         'Container agent error',
       );
       return 'error';
     }
 
+    // Success - clear any failure tracking
+    const health = getSessionHealth(group.folder);
+    if (health && health.consecutive_failures > 0) {
+      logger.info(
+        { group: group.name, previousFailures: health.consecutive_failures },
+        'Session recovered after previous failures',
+      );
+      clearSessionHealth(group.folder);
+    }
     return 'success';
   } catch (err) {
     logger.error({ group: group.name, err }, 'Agent error');

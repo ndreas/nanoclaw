@@ -5,7 +5,13 @@ import { CronExpressionParser } from 'cron-parser';
 
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { AvailableGroup } from './container-runner.js';
-import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import {
+  createTask,
+  deleteTask,
+  getTaskById,
+  updateTask,
+  deleteSession,
+} from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
@@ -446,6 +452,34 @@ export async function processTaskIpc(
           { data },
           'Invalid register_group request - missing required fields',
         );
+      }
+      break;
+
+    case 'reset_session':
+      // Only main group can reset sessions
+      if (!isMain) {
+        logger.warn(
+          { sourceGroup },
+          'Unauthorized reset_session attempt blocked',
+        );
+        break;
+      }
+      if (data.groupFolder) {
+        const targetGroup = Object.values(registeredGroups).find(
+          (g) => g.folder === data.groupFolder,
+        );
+        if (targetGroup) {
+          deleteSession(data.groupFolder);
+          logger.info(
+            { targetFolder: data.groupFolder },
+            'Session manually reset via IPC',
+          );
+        } else {
+          logger.warn(
+            { targetFolder: data.groupFolder },
+            'Cannot reset session: group not found',
+          );
+        }
       }
       break;
 

@@ -407,23 +407,54 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__calendar__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
       settingSources: ['project', 'user'],
-      mcpServers: {
-        nanoclaw: {
-          command: 'node',
-          args: [mcpServerPath],
-          env: {
-            NANOCLAW_CHAT_JID: containerInput.chatJid,
-            NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
-            NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+      mcpServers: (() => {
+        const servers: Record<string, any> = {
+          nanoclaw: {
+            command: 'node',
+            args: [mcpServerPath],
+            env: {
+              NANOCLAW_CHAT_JID: containerInput.chatJid,
+              NANOCLAW_GROUP_FOLDER: containerInput.groupFolder,
+              NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
+            },
           },
-        },
-      },
+        };
+
+        // Add calendar MCP server if credentials exist
+        const calendarCredsPath = '/workspace/.fastmail-calendar/credentials.json';
+        log(`Checking for calendar credentials at: ${calendarCredsPath}`);
+        log(`File exists: ${fs.existsSync(calendarCredsPath)}`);
+        if (fs.existsSync(calendarCredsPath)) {
+          log(`Loading calendar credentials...`);
+          try {
+            const creds = JSON.parse(fs.readFileSync(calendarCredsPath, 'utf-8'));
+            log(`Calendar credentials loaded, setting up MCP server`);
+            servers.calendar = {
+              command: 'node',
+              args: ['/app/node_modules/.bin/caldav-mcp'],
+              env: {
+                CALDAV_BASE_URL: creds.baseUrl || 'https://caldav.fastmail.com',
+                CALDAV_USERNAME: creds.username,
+                CALDAV_PASSWORD: creds.password,
+              },
+            };
+            log(`Calendar MCP server configured`);
+          } catch (e) {
+            log(`Warning: Failed to load calendar credentials: ${e}`);
+          }
+        } else {
+          log(`Calendar credentials file not found`);
+        }
+
+        return servers;
+      })(),
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
       },

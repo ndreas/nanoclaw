@@ -3,7 +3,11 @@
 
 // discord
 
+import './fastmail-calendar-register.js';
+
 // gmail
+
+import './irc-register.js';
 
 // slack
 

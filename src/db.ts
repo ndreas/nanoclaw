@@ -82,6 +82,13 @@ function createSchema(database: Database.Database): void {
       container_config TEXT,
       requires_trigger INTEGER DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS session_health (
+      group_folder TEXT PRIMARY KEY,
+      consecutive_failures INTEGER DEFAULT 0,
+      last_failure_time TEXT,
+      last_error TEXT,
+      FOREIGN KEY (group_folder) REFERENCES sessions(group_folder)
+    );
   `);
 
   // Add context_mode column if it doesn't exist (migration for existing DBs)
@@ -138,6 +145,20 @@ function createSchema(database: Database.Database): void {
     );
   } catch {
     /* columns already exist */
+  }
+
+  // Add session_health table if it doesn't exist (migration for existing DBs)
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS session_health (
+        group_folder TEXT PRIMARY KEY,
+        consecutive_failures INTEGER DEFAULT 0,
+        last_failure_time TEXT,
+        last_error TEXT
+      );
+    `);
+  } catch {
+    /* table already exists */
   }
 }
 
@@ -535,6 +556,58 @@ export function getAllSessions(): Record<string, string> {
     result[row.group_folder] = row.session_id;
   }
   return result;
+}
+
+// --- Session health accessors ---
+
+export function getSessionHealth(groupFolder: string):
+  | {
+      consecutive_failures: number;
+      last_failure_time: string | null;
+      last_error: string | null;
+    }
+  | undefined {
+  const row = db
+    .prepare(
+      'SELECT consecutive_failures, last_failure_time, last_error FROM session_health WHERE group_folder = ?',
+    )
+    .get(groupFolder) as any;
+  return row;
+}
+
+export function recordSessionFailure(groupFolder: string, error: string): void {
+  const existing = getSessionHealth(groupFolder);
+  const count = (existing?.consecutive_failures || 0) + 1;
+
+  db.prepare(
+    `
+    INSERT INTO session_health (group_folder, consecutive_failures, last_failure_time, last_error)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(group_folder) DO UPDATE SET
+      consecutive_failures = ?,
+      last_failure_time = ?,
+      last_error = ?
+  `,
+  ).run(
+    groupFolder,
+    count,
+    new Date().toISOString(),
+    error,
+    count,
+    new Date().toISOString(),
+    error,
+  );
+}
+
+export function clearSessionHealth(groupFolder: string): void {
+  db.prepare('DELETE FROM session_health WHERE group_folder = ?').run(
+    groupFolder,
+  );
+}
+
+export function deleteSession(groupFolder: string): void {
+  db.prepare('DELETE FROM sessions WHERE group_folder = ?').run(groupFolder);
+  clearSessionHealth(groupFolder);
 }
 
 // --- Registered group accessors ---

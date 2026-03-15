@@ -33,6 +33,54 @@ import { RegisteredGroup } from './types.js';
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
+/**
+ * Check if base agent-runner source is newer than the group's copy.
+ * Used to automatically sync updates while preserving group customizations.
+ */
+function isBaseSourceNewer(basePath: string, groupPath: string): boolean {
+  // If group directory doesn't exist, we need to sync
+  if (!fs.existsSync(groupPath)) {
+    return true;
+  }
+
+  // Get the most recent modification time from base source directory
+  const baseFiles = fs.readdirSync(basePath, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  let baseMostRecent = 0;
+
+  for (const file of baseFiles) {
+    if (file.isFile()) {
+      const fullPath = path.join(file.path || basePath, file.name);
+      const stats = fs.statSync(fullPath);
+      if (stats.mtimeMs > baseMostRecent) {
+        baseMostRecent = stats.mtimeMs;
+      }
+    }
+  }
+
+  // Get the most recent modification time from group source directory
+  const groupFiles = fs.readdirSync(groupPath, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  let groupMostRecent = 0;
+
+  for (const file of groupFiles) {
+    if (file.isFile()) {
+      const fullPath = path.join(file.path || groupPath, file.name);
+      const stats = fs.statSync(fullPath);
+      if (stats.mtimeMs > groupMostRecent) {
+        groupMostRecent = stats.mtimeMs;
+      }
+    }
+  }
+
+  // Base is newer if its most recent file is newer than group's most recent file
+  return baseMostRecent > groupMostRecent;
+}
+
 export interface ContainerInput {
   prompt: string;
   sessionId?: string;
@@ -169,6 +217,12 @@ function buildVolumeMounts(
   fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
   fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
+
+  // Set permissions for container access
+  fs.chmodSync(path.join(groupIpcDir, 'messages'), 0o777);
+  fs.chmodSync(path.join(groupIpcDir, 'tasks'), 0o777);
+  fs.chmodSync(path.join(groupIpcDir, 'input'), 0o777);
+
   mounts.push({
     hostPath: groupIpcDir,
     containerPath: '/workspace/ipc',
@@ -190,14 +244,42 @@ function buildVolumeMounts(
     group.folder,
     'agent-runner-src',
   );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  // Sync agent-runner source if base is newer (automatic updates + preserve customizations)
+  if (fs.existsSync(agentRunnerSrc)) {
+    if (isBaseSourceNewer(agentRunnerSrc, groupAgentRunnerDir)) {
+      logger.debug(
+        {
+          group: group.folder,
+          basePath: agentRunnerSrc,
+          groupPath: groupAgentRunnerDir,
+        },
+        'Syncing updated agent-runner source to group',
+      );
+      fs.mkdirSync(groupAgentRunnerDir, { recursive: true });
+      fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, {
+        recursive: true,
+        force: true,
+      });
+    }
   }
   mounts.push({
     hostPath: groupAgentRunnerDir,
     containerPath: '/app/src',
     readonly: false,
   });
+
+  // Mount Fastmail calendar credentials if available (read-only)
+  const calendarCredsDir = path.join(
+    process.env.HOME || '/home/node',
+    '.fastmail-calendar',
+  );
+  if (fs.existsSync(calendarCredsDir)) {
+    mounts.push({
+      hostPath: calendarCredsDir,
+      containerPath: '/workspace/.fastmail-calendar',
+      readonly: true,
+    });
+  }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
