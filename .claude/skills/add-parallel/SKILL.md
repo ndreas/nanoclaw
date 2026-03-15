@@ -257,6 +257,10 @@ Tell the user to test:
 
 Check logs to verify MCP servers loaded:
 ```bash
+# Linux systemd
+journalctl --user -u nanoclaw -n 20
+
+# macOS
 tail -20 logs/nanoclaw.log
 ```
 
@@ -276,7 +280,7 @@ Look for: `Parallel AI MCP servers configured`
 
 **Task polling not working:**
 - Verify scheduled task was created: `sqlite3 store/messages.db "SELECT * FROM scheduled_tasks"`
-- Check task runs: `tail -f logs/nanoclaw.log | grep "scheduled task"`
+- Check task runs: `journalctl --user -u nanoclaw -f | grep "scheduled task"` (Linux) or `tail -f logs/nanoclaw.log | grep "scheduled task"` (macOS)
 - Ensure task prompt includes proper Parallel MCP tool names
 
 ## Uninstalling

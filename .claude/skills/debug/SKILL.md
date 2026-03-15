@@ -30,8 +30,10 @@ src/container-runner.ts               container/agent-runner/
 
 | Log | Location | Content |
 |-----|----------|---------|
-| **Main app logs** | `logs/nanoclaw.log` | Host-side WhatsApp, routing, container spawning |
-| **Main app errors** | `logs/nanoclaw.error.log` | Host-side errors |
+| **Main app logs (Linux systemd)** | `journalctl --user -u nanoclaw` | Host-side routing, container spawning |
+| **Main app logs (macOS)** | `logs/nanoclaw.log` | Host-side routing, container spawning |
+| **Main app logs (WSL)** | `logs/nanoclaw.log` | Host-side routing, container spawning |
+| **Main app errors (macOS)** | `logs/nanoclaw.error.log` | Host-side errors |
 | **Container run logs** | `groups/{folder}/logs/container-*.log` | Per-run: input, mounts, stderr, stdout |
 | **Claude sessions** | `~/.claude/projects/` | Claude Code session history |
 

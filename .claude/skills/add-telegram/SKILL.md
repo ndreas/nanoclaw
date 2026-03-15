@@ -185,7 +185,7 @@ Group Privacy is enabled (default). Fix:
 
 If `/chatid` doesn't work:
 - Verify token: `curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"`
-- Check bot is started: `tail -f logs/nanoclaw.log`
+- Check bot is started: `journalctl --user -u nanoclaw -f` (Linux) or `tail -f logs/nanoclaw.log` (macOS)
 
 ## After Setup
 

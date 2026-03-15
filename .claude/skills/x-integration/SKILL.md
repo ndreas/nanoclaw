@@ -362,10 +362,12 @@ rm -f data/x-browser-profile/SingletonCookie
 ### Check Logs
 
 ```bash
-# Host logs (relative to project root)
-grep -i "x_post\|x_like\|x_reply\|handleXIpc" logs/nanoclaw.log | tail -20
+# Linux systemd
+journalctl --user -u nanoclaw | grep -i "x_post\|x_like\|x_reply\|handleXIpc" | tail -20
+journalctl --user -u nanoclaw | grep -i "error\|failed" | tail -20
 
-# Script errors
+# macOS (relative to project root)
+grep -i "x_post\|x_like\|x_reply\|handleXIpc" logs/nanoclaw.log | tail -20
 grep -i "error\|failed" logs/nanoclaw.log | tail -20
 ```
 

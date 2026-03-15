@@ -203,7 +203,9 @@ Run `npx tsx setup/index.ts --step verify` and parse the status block.
 - REGISTERED_GROUPS=0 → re-invoke the channel skills from step 5
 - MOUNT_ALLOWLIST=missing → `npx tsx setup/index.ts --step mounts -- --empty`
 
-Tell user to test: send a message in their registered chat. Show: `tail -f logs/nanoclaw.log`
+Tell user to test: send a message in their registered chat. Show logs:
+- Linux: `journalctl --user -u nanoclaw -f`
+- macOS/WSL: `tail -f logs/nanoclaw.log`
 
 ## Troubleshooting
 

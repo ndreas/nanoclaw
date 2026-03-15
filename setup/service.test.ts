@@ -64,8 +64,9 @@ Restart=always
 RestartSec=5
 Environment=HOME=${homeDir}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin
-StandardOutput=append:${projectRoot}/logs/nanoclaw.log
-StandardError=append:${projectRoot}/logs/nanoclaw.error.log
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nanoclaw
 
 [Install]
 WantedBy=${isSystem ? 'multi-user.target' : 'default.target'}`;
@@ -152,6 +153,19 @@ describe('systemd unit generation', () => {
     expect(unit).toContain(
       'ExecStart=/usr/bin/node /srv/nanoclaw/dist/index.js',
     );
+  });
+
+  it('uses journal for logging', () => {
+    const unit = generateSystemdUnit(
+      '/usr/bin/node',
+      '/home/user/nanoclaw',
+      '/home/user',
+      false,
+    );
+    expect(unit).toContain('StandardOutput=journal');
+    expect(unit).toContain('StandardError=journal');
+    expect(unit).toContain('SyslogIdentifier=nanoclaw');
+    expect(unit).not.toContain('logs/nanoclaw.log');
   });
 });
 

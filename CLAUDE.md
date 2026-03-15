@@ -55,6 +55,19 @@ systemctl --user stop nanoclaw
 systemctl --user restart nanoclaw
 ```
 
+View logs:
+```bash
+# Linux (systemd)
+journalctl --user -u nanoclaw -f              # follow logs
+journalctl --user -u nanoclaw -n 50           # last 50 lines
+journalctl --user -u nanoclaw -p warning      # errors/warnings only
+journalctl --user -u nanoclaw --since "1h ago"  # time-based filter
+
+# macOS (launchd)
+tail -f logs/nanoclaw.log
+grep -E 'ERROR|WARN' logs/nanoclaw.log | tail -20
+```
+
 ## Troubleshooting
 
 **WhatsApp not connecting after upgrade:** WhatsApp is now a separate channel fork, not bundled in core. Run `/add-whatsapp` (or `git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git && git fetch whatsapp main && (git merge whatsapp/main || { git checkout --theirs package-lock.json && git add package-lock.json && git merge --continue; }) && npm run build`) to install it. Existing auth credentials and groups are preserved.

@@ -333,7 +333,7 @@ Check:
 1. Auth credentials exist: `ls store/auth/creds.json`
 3. Chat is registered: `sqlite3 store/messages.db "SELECT * FROM registered_groups WHERE jid LIKE '%whatsapp%' OR jid LIKE '%@g.us' OR jid LIKE '%@s.whatsapp.net'"`
 4. Service is running: `launchctl list | grep nanoclaw` (macOS) or `systemctl --user status nanoclaw` (Linux)
-5. Logs: `tail -50 logs/nanoclaw.log`
+5. Logs: `journalctl --user -u nanoclaw -n 50` (Linux) or `tail -50 logs/nanoclaw.log` (macOS)
 
 ### Group names not showing
 

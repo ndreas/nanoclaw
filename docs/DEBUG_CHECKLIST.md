@@ -13,25 +13,53 @@ Both timers fire at the same time, so containers always exit via hard SIGKILL (c
 
 ## Quick Status Check
 
+### Linux (systemd)
+
+```bash
+# 1. Is the service running?
+systemctl --user status nanoclaw
+# Expected: Active: active (running)
+
+# 2. Recent logs (follow in real-time)
+journalctl --user -u nanoclaw -f
+
+# 3. Recent errors/warnings
+journalctl --user -u nanoclaw -p warning -n 20
+
+# 4. Is WhatsApp connected?
+journalctl --user -u nanoclaw | grep -E 'Connected to WhatsApp|Connection closed|connection.*close' | tail -5
+
+# 5. Are groups loaded?
+journalctl --user -u nanoclaw | grep 'groupCount' | tail -3
+
+# 6. Any running containers?
+container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
+
+# 7. Any stopped/orphaned containers?
+container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
+```
+
+### macOS (launchd)
+
 ```bash
 # 1. Is the service running?
 launchctl list | grep nanoclaw
 # Expected: PID  0  com.nanoclaw (PID = running, "-" = not running, non-zero exit = crashed)
 
-# 2. Any running containers?
-container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
-
-# 3. Any stopped/orphaned containers?
-container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
-
-# 4. Recent errors in service log?
+# 2. Recent errors in service log?
 grep -E 'ERROR|WARN' logs/nanoclaw.log | tail -20
 
-# 5. Is WhatsApp connected? (look for last connection event)
+# 3. Is WhatsApp connected?
 grep -E 'Connected to WhatsApp|Connection closed|connection.*close' logs/nanoclaw.log | tail -5
 
-# 6. Are groups loaded?
+# 4. Are groups loaded?
 grep 'groupCount' logs/nanoclaw.log | tail -3
+
+# 5. Any running containers?
+container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
+
+# 6. Any stopped/orphaned containers?
+container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
 ```
 
 ## Session Transcript Branching
