@@ -1,17 +1,19 @@
 # Fastmail Calendar Integration
 
 Dual-mode calendar integration for NanoClaw with Fastmail CalDAV:
-- **Tool Mode**: Agents can manage calendars when asked from any channel
+- **Tool Mode**: Agents can manage calendars, contacts, and tasks when asked from any channel
 - **Channel Mode**: Calendar events trigger the agent automatically
 
 ## Features
 
 ### Tool Mode (MCP Tools)
-Available to all agents via `mcp__calendar__*` tools:
+Available to all agents via `mcp__calendar__*` and `mcp__dav-mcp__*` tools:
 - List all calendars
 - List events within a timeframe
-- Create new events
+- Create new events with reminders, attendees, and recurrence
 - Delete events by UID
+- **Full VTODO support**: Create, update, delete, and query tasks/reminders
+- **CardDAV support**: Manage contacts (create, update, delete, search)
 
 ### Channel Mode (Auto-triggering)
 Each calendar becomes a registered group that receives:
@@ -120,8 +122,9 @@ Fastmail CalDAV ↔ Channel (polling) → SQLite → Agent Container → MCP Too
 ```
 
 ### Components
-1. **CalDAV MCP Server** (`caldav-mcp` npm package)
-   - Provides calendar tools to agents
+1. **DAV MCP Server** (`dav-mcp` npm package v3.0.1)
+   - Provides 26 production-ready tools: 11 CalDAV tools, 8 CardDAV tools, 7 VTODO tools
+   - Full support for events, contacts, tasks, and reminders
    - Configured in `container/agent-runner/src/index.ts`
    - Credentials mounted read-only from `~/.fastmail-calendar/`
 
@@ -250,8 +253,8 @@ Shared or read-only calendars are detected via CalDAV permissions. Write operati
 ## References
 
 - [CalDAV RFC 4791](https://www.rfc-editor.org/rfc/rfc4791)
-- [tsdav GitHub](https://github.com/natelindev/tsdav)
-- [caldav-mcp npm package](https://www.npmjs.com/package/caldav-mcp)
+- [dav-mcp GitHub](https://github.com/PhilflowIO/dav-mcp)
+- [dav-mcp npm package](https://www.npmjs.com/search?q=dav-mcp)
 - [Fastmail CalDAV Documentation](https://www.fastmail.com/help/technical/server.html)
 
 ## Support
