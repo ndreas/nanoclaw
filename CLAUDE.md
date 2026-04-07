@@ -68,6 +68,21 @@ tail -f logs/nanoclaw.log
 grep -E 'ERROR|WARN' logs/nanoclaw.log | tail -20
 ```
 
+## Calendar Tools (CalDAV MCP)
+
+**IMPORTANT**: The CalDAV MCP tools require querying each calendar individually.
+
+When a user asks about calendar events (e.g., "what events do I have next week?"):
+
+1. Call `mcp__calendar__caldav_list_calendars` to get all calendars with their indexes
+2. For each calendar, call the event query tool with `calendar_index` parameter:
+   - `caldav_get_events` with `calendar_index`, `start_date`, `end_date`
+   - Or `caldav_get_week_events` with `calendar_index`
+   - Or `caldav_get_today_events` with `calendar_index`
+3. Merge results from all calendars
+
+**Without `calendar_index`, queries return empty results.**
+
 ## Troubleshooting
 
 **WhatsApp not connecting after upgrade:** WhatsApp is now a separate channel fork, not bundled in core. Run `/add-whatsapp` (or `git remote add whatsapp https://github.com/qwibitai/nanoclaw-whatsapp.git && git fetch whatsapp main && (git merge whatsapp/main || { git checkout --theirs package-lock.json && git add package-lock.json && git merge --continue; }) && npm run build`) to install it. Existing auth credentials and groups are preserved.

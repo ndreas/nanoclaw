@@ -427,7 +427,7 @@ async function runQuery(
           },
         };
 
-        // Add calendar MCP server if credentials exist
+        // Add DAV MCP server if credentials exist
         const calendarCredsPath = '/workspace/.fastmail-calendar/credentials.json';
         log(`Checking for calendar credentials at: ${calendarCredsPath}`);
         log(`File exists: ${fs.existsSync(calendarCredsPath)}`);
@@ -435,17 +435,17 @@ async function runQuery(
           log(`Loading calendar credentials...`);
           try {
             const creds = JSON.parse(fs.readFileSync(calendarCredsPath, 'utf-8'));
-            log(`Calendar credentials loaded, setting up MCP server`);
+            log(`Calendar credentials loaded, setting up Python CalDAV MCP server`);
             servers.calendar = {
-              command: 'node',
-              args: ['/app/node_modules/.bin/caldav-mcp'],
+              command: 'mcp-caldav',
+              args: [],
               env: {
-                CALDAV_BASE_URL: creds.baseUrl || 'https://caldav.fastmail.com',
+                CALDAV_URL: creds.baseUrl || 'https://caldav.fastmail.com/dav/calendars/user/andreas@ndrs.se/',
                 CALDAV_USERNAME: creds.username,
                 CALDAV_PASSWORD: creds.password,
               },
             };
-            log(`Calendar MCP server configured`);
+            log(`Python CalDAV MCP server configured`);
           } catch (e) {
             log(`Warning: Failed to load calendar credentials: ${e}`);
           }

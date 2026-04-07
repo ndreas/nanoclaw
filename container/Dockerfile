@@ -3,7 +3,7 @@
 
 FROM node:22-slim
 
-# Install system dependencies for Chromium
+# Install system dependencies for Chromium and Python tools
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
@@ -24,7 +24,17 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     curl \
     git \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install uv (Python package manager for running mcp-caldav)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    cp /root/.local/bin/uv /usr/local/bin/ && \
+    cp /root/.local/bin/uvx /usr/local/bin/ && \
+    chmod +x /usr/local/bin/uv /usr/local/bin/uvx
+
+# Install mcp-caldav from GitHub
+RUN pip3 install --break-system-packages git+https://github.com/madbonez/caldav-mcp.git
 
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
