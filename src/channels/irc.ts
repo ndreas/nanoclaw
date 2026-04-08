@@ -1,8 +1,13 @@
 import * as IRC from 'irc-framework';
-import { Channel, OnInboundMessage, OnChatMetadata } from '../types.js';
+import {
+  Channel,
+  OnInboundMessage,
+  OnChatMetadata,
+  RegisteredGroup,
+} from '../types.js';
 import { logger } from '../logger.js';
 import { readEnvFile } from '../env.js';
-import { getRegisteredGroup, setRegisteredGroup } from '../db.js';
+import { getRegisteredGroup } from '../db.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -12,8 +17,20 @@ export class IrcChannel implements Channel {
   name = 'irc';
   private client: IRC.Client | null = null;
   private connected = false;
+  private historyFetchedNicks = new Set<string>();
+  // Buffer: chatJid → messages accumulated during a chathistory batch
+  private historyBuffer = new Map<
+    string,
+    Array<{
+      from: string;
+      timestamp: string;
+      content: string;
+      isBotMsg: boolean;
+    }>
+  >();
   private onMessage: OnInboundMessage;
   private onChatMetadata: OnChatMetadata;
+  private registerGroupFn: (jid: string, group: RegisteredGroup) => void;
   private config: {
     server: string;
     port: number;
@@ -23,9 +40,14 @@ export class IrcChannel implements Channel {
     channels: string[];
   };
 
-  constructor(onMessage: OnInboundMessage, onChatMetadata: OnChatMetadata) {
+  constructor(
+    onMessage: OnInboundMessage,
+    onChatMetadata: OnChatMetadata,
+    registerGroup: (jid: string, group: RegisteredGroup) => void,
+  ) {
     this.onMessage = onMessage;
     this.onChatMetadata = onChatMetadata;
+    this.registerGroupFn = registerGroup;
 
     // Load config from environment
     const env = readEnvFile([
@@ -95,6 +117,29 @@ export class IrcChannel implements Channel {
       this.handleMessage(event);
     });
 
+    // Request chathistory after joining each channel
+    this.client.on('join', (event: any) => {
+      if (event.nick === this.config.nick) {
+        this.requestChatHistory(event.channel);
+      }
+    });
+
+    // Write history file once a full chathistory batch has arrived
+    this.client.on('batch end chathistory', () => {
+      for (const [chatJid, messages] of this.historyBuffer) {
+        this.writeHistoryFile(chatJid, messages);
+      }
+      this.historyBuffer.clear();
+    });
+
+    // Request caps for soju chathistory support
+    (this.client as any).requestCap([
+      'draft/chathistory',
+      'server-time',
+      'batch',
+      'message-tags',
+    ]);
+
     // Connect with SASL auth
     this.client.connect({
       host: this.config.server,
@@ -136,6 +181,35 @@ export class IrcChannel implements Channel {
       .toLowerCase()
       .includes(this.config.nick.toLowerCase());
 
+    // Chathistory batch messages from soju — store as context, don't trigger agent
+    if (event.batch?.type === 'chathistory') {
+      const isBotMsg = from.toLowerCase() === this.config.nick.toLowerCase();
+      // For bot's own sent PMs, target is the peer; for everything else use normal logic
+      const chatJid =
+        isPrivate || !isBotMsg
+          ? isPrivate
+            ? `irc:${from}`
+            : `irc:${target}`
+          : `irc:${target}`;
+      const timestamp = event.tags?.time || new Date().toISOString();
+      const msgid = event.tags?.msgid || `hist-${timestamp}-${from}`;
+      this.onMessage(chatJid, {
+        id: msgid,
+        chat_jid: chatJid,
+        sender: `irc:${from}`,
+        sender_name: from,
+        content: message,
+        timestamp,
+        is_from_me: isBotMsg,
+        is_bot_message: isBotMsg,
+      });
+      // Accumulate for history file
+      const buf = this.historyBuffer.get(chatJid) ?? [];
+      buf.push({ from, timestamp, content: message, isBotMsg });
+      this.historyBuffer.set(chatJid, buf);
+      return;
+    }
+
     // Only respond to:
     // 1. Private messages
     // 2. Channel messages where we're mentioned
@@ -146,9 +220,13 @@ export class IrcChannel implements Channel {
     // Build JID: irc:channel for channels, irc:nick for private messages
     const chatJid = isPrivate ? `irc:${from}` : `irc:${target}`;
 
-    // Auto-register private message senders
+    // Auto-register private message senders and fetch history once per session
     if (isPrivate) {
       this.autoRegisterPrivateMessage(from);
+      if (!this.historyFetchedNicks.has(from)) {
+        this.historyFetchedNicks.add(from);
+        this.requestChatHistory(from);
+      }
     }
 
     log.info(
@@ -325,7 +403,7 @@ When you learn something important:
       fs.writeFileSync(claudeMdPath, claudeMdContent, 'utf-8');
     }
 
-    // Register the channel
+    // Register the channel (updates both in-memory state and DB)
     const group = {
       name: channel,
       folder: folderName,
@@ -335,11 +413,52 @@ When you learn something important:
       isMain: false,
     };
 
-    setRegisteredGroup(chatJid, group);
+    this.registerGroupFn(chatJid, group);
 
     log.info(
       { channel, chatJid, folder: folderName },
       'Auto-registered IRC channel',
+    );
+  }
+
+  private requestChatHistory(ircTarget: string): void {
+    if (!this.client || !this.connected) return;
+    log.info({ target: ircTarget }, 'Requesting chathistory from soju');
+    (this.client as any).raw('CHATHISTORY', 'LATEST', ircTarget, '*', '100');
+  }
+
+  private writeHistoryFile(
+    chatJid: string,
+    messages: Array<{
+      from: string;
+      timestamp: string;
+      content: string;
+      isBotMsg: boolean;
+    }>,
+  ): void {
+    if (messages.length === 0) return;
+
+    const group = getRegisteredGroup(chatJid);
+    if (!group) return;
+
+    const groupFolder = path.join(process.cwd(), 'groups', group.folder);
+    const conversationsDir = path.join(groupFolder, 'conversations');
+    fs.mkdirSync(conversationsDir, { recursive: true });
+
+    const lines = messages.map(({ from, timestamp, content }) => {
+      const timeStr = timestamp ? new Date(timestamp).toLocaleString() : '';
+      return `[${timeStr}] <${from}> ${content}`;
+    });
+
+    const historyFile = path.join(conversationsDir, 'irc-log.md');
+    fs.writeFileSync(
+      historyFile,
+      `# IRC Chat History\n\n${lines.join('\n')}\n`,
+      'utf-8',
+    );
+    log.info(
+      { folder: group.folder, messageCount: messages.length },
+      'Wrote chathistory to file',
     );
   }
 
@@ -451,7 +570,7 @@ When you learn something important:
       fs.writeFileSync(claudeMdPath, claudeMdContent, 'utf-8');
     }
 
-    // Register the private message group
+    // Register the private message group (updates both in-memory state and DB)
     const group = {
       name: `PM: ${nickname}`,
       folder: folderName,
@@ -461,7 +580,7 @@ When you learn something important:
       isMain: false,
     };
 
-    setRegisteredGroup(chatJid, group);
+    this.registerGroupFn(chatJid, group);
 
     log.info(
       { nickname, chatJid, folder: folderName },

@@ -23,5 +23,9 @@ registerChannel('irc', (opts) => {
   }
 
   log.info('IRC channel enabled');
-  return new IrcChannel(opts.onMessage, opts.onChatMetadata);
+  return new IrcChannel(
+    opts.onMessage,
+    opts.onChatMetadata,
+    opts.registerGroup,
+  );
 });
